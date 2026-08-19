@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Document</title>
+		<script type="module" src="/src/tritone.js"></script>
+		<script type="module" src="/src/index.js"></script>
+		<script type="module">
+			(() => {
+				let triPlayBtn = document.getElementById("play-button-tritone");
+				let triStopBtn = document.getElementById("stop-button-tritone");
+
+				window.stopTri = () => {
+					console.log("Stop tritone");
+				};
+
+				window.playTri = async () => {
+					console.log("Play tritone");
+				};
+
+				triPlayBtn.onclick = window.playTri;
+				triStopBtn.onclick = window.stopTri;
+			})();
+		</script>
+	</head>
+	<body>
+		<h1>Sound Test</h1>
+		<button id="play-button">Play</button>
+		<button id="stop-button">Stop</button>
+
+		<h1>Tritone Test</h1>
+		<button id="play-button-tritone">Play</button>
+		<button id="stop-button-tritone">Stop</button>
+	</body>
+</html>
