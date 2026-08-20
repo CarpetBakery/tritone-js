@@ -35,7 +35,20 @@
 	}
 
 	function readString(view, p) {
-		throw "Not implemented.";	
+		let _length = 0;
+		let bytes = [];
+
+		while (p < view.byteLength) {
+			const byte = view.getUint8(p, true);
+			if (byte === 0) {
+				break;
+			}
+			bytes.push(byte);
+			p++;
+		}
+
+		const decoder = new TextDecoder("utf-8");
+		return decoder.decode(new Uint8Array(bytes));
 	}
 
 	class NoteEvent {
@@ -519,7 +532,6 @@
 
 			// -- Read track info chunk --
 			for (let i = 0; i < _numTracks; i++) {
-				// TODO: I didn't write readString yet
 				let samplePath = readString(view, p);
 				p += samplePath.length + 1;
 
@@ -539,8 +551,45 @@
 				panCount[i] = view.getUint32(p, true); p += 4;
 			}
 
+			// Read track event data
+			for (let i = 0; i < _numTracks; i++) {
+				let samplePath = samplePaths[i];
+				let _oneshot = oneshot[i];
+
+				// Read note data
+				for (let j = 0; j < noteConut[i]; j++) {
+					let note = new NoteEvent();
+	
+					let position = view.getUint32(p, true); p += 4;
+					let pitch = view.getUint8(p, true); p += 1;
+					let length = view.getUint16(p, true); p += 2;
+	
+					// addNoteData()
+				}
+
+				let velocityEvents = new Map();
+				let panEvents = new Map();
+
+				// TODO: need some way to pass dataview pointer
+				readEvents(view, velocityCount[i], velocityEvents, version);
+				readEvents(view, panCount[i], panEvents, version);
+			}
+
 			// TODO: fix my original stupid method of writing data into editor structs first
 			// and then filling playback structs after... should go straight into playback.
+		}
+
+		readEvents(view, numEvents, eventMap, version) {
+			// TODO
+
+			if (version == 1) {
+				for (let i = 0; i < numEvents; i++) {
+					// let event = new Event(0);
+				}
+			}
+			else if (version == 0) {
+
+			}
 		}
 
 		play() {}
