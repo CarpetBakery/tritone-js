@@ -16,6 +16,14 @@
 	const twelveRoot2 = Math.pow(2.0, 1.0 / 12.0);
 	const pitchOffset = -32;
 
+	// Tritone format
+	const magicHeader = "TRTN";
+	const version = 1;
+	const trackCount = 16;
+	const numEventTypes = 2;
+	const defaultSampleData = "DUMMY";	
+	
+	// -- Helpers --
 	function approach(from, target, amt) {
 		return from < target
 			? Math.min(from + amt, target)
@@ -24,6 +32,10 @@
 
 	function lerp(a, b, fac) {
 		return a + (b - a) * fac;
+	}
+
+	function readString(view, p) {
+		throw "Not implemented.";	
 	}
 
 	class NoteEvent {
@@ -402,9 +414,33 @@
 			this.node = null;
 		}
 
-		requestUnusedVoice() {}
-		triggerTrackEvents() {}
-		killAllVoices() {}
+		requestUnusedVoice() {
+			if (this.inactiveVoices.length <= 0) {
+				// sorry bro
+				return null;
+			}
+
+			let voice = this.inactiveVoices.pop()
+			this.activeVoices.push(voice);
+
+			// Initialize voice
+			voice = new Voice();
+
+			return voice;
+		}
+
+		triggerTrackEvents() {
+			this.song.tracks.forEach((track) => {
+				track.triggerEvents(this.playhead, this);
+			});
+		}
+
+		killAllVoices() {
+			for (let i = this.activeVoices.length - 1; i >= 0; i--) {
+				let voice = this.activeVoices.at(i);
+				voice.framesLeft = 0;
+			}
+		}
 
 		startPlayingInternal() {}
 		stopPlayingInternal() {}
@@ -438,7 +474,14 @@
 		}
 
 		// Seek to a part of the song
-		seek(position) {}
+		seek(position) {
+			if (this.song.endPosition > 0 && position > (this.song.endPosition - 1)) {
+				// if we reached the end, wrap around to the beginning
+				this.playhead = 0;
+				return;
+			}
+			this.playhead = position;
+		}
 
         // Load a sample if it hasn't already been loaded and return a pointer to the SampleData
 		loadOrFetchSampleData(path) {}
@@ -447,7 +490,58 @@
 		generateSamples(leftBuffer, rightBuffer) {}
 
 		// Load a song from a file
-		load(path, playOnLoad = false) {}
+		async load(path, playOnLoad = false) {
+			let noteCount = Array(trackCount).fill(0);
+			let velocityCount = Array(trackCount).fill(0);
+			let panCount = Array(trackCount).fill(0);
+			let samplePaths = Array(trackCount).fill("");
+			let oneshot = Array(trackCount).fill(false);
+
+			// Fetch binary song data
+			const res = await fetch(path);
+			const data = await res.arrayBuffer();
+			const view = new DataView(data);
+			let p = 0;
+
+			// Verify tritone project file
+			const magic = view.getUint32(p, true); p += 4;
+			if (magic != 0x5452544E) {
+				throw "Invalid magic header.";
+			}
+
+			// -- Read song info --
+			const version = view.getUint16(p, true); p += 2;
+			const bpm = view.getUint16(p, true); p += 2;
+			const repeatPosition = view.getUint32(p, true); p += 4;
+			const endSongPosition = view.getUint32(p, true); p += 4;
+			const _numEvents = view.getUint8(p, true); p += 1;
+			const _numTracks = view.getUint16(p, true); p += 2;
+
+			// -- Read track info chunk --
+			for (let i = 0; i < _numTracks; i++) {
+				// TODO: I didn't write readString yet
+				let samplePath = readString(view, p);
+				p += samplePath.length + 1;
+
+				if (samplePath != defaultSampleData) {
+					samplePaths[i] = samplePath;
+				}
+				else {
+					samplePaths[i] = "";
+				}
+
+				oneshot[i] = view.getUint8(p, true); p += 1;
+
+				const sampleLoopStart = view.getUint32(p, true); p += 4;
+				const sampleLoopEnd = view.getUint32(p, true); p += 4;
+				noteCount[i] = view.getUint32(p, true); p += 4;
+				velocityCount[i] = view.getUint32(p, true); p += 4;
+				panCount[i] = view.getUint32(p, true); p += 4;
+			}
+
+			// TODO: fix my original stupid method of writing data into editor structs first
+			// and then filling playback structs after... should go straight into playback.
+		}
 
 		play() {}
 		pause() {}
