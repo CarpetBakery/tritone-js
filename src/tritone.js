@@ -1,6 +1,8 @@
 (() => {
 	// TriTone music format by CarpetBakery
 
+	const epsilon = 0.000001;
+	
 	// Music
 	const masterVolumeMax = 1.0;
 	const masterVolumeMin = 0.0;
@@ -28,6 +30,19 @@
 		return from < target
 			? Math.min(from + amt, target)
 			: Math.max(from - amt, target);
+	}
+
+	function clamp(a, min, max)
+	{
+		if (a < min)
+		{
+			return min;
+		}
+		else if (a > max)
+		{
+			return max;
+		}
+		return a;
 	}
 
 	function lerp(a, b, fac) {
@@ -200,6 +215,11 @@
 			this.dataIndex = 0;
 		}
 
+		/**
+		 * 
+		 * @param {Boolean} rightChannel 
+		 * @returns 
+		 */
 		eval(rightChannel) {
 			if (!this.sampleData) {
 				return 0.0;
@@ -248,9 +268,9 @@
 			}
 
 			// Apply release
-			if (m_releaseActive) {
+			if (this.releaseActive) {
 				// Ramp volume towards 0
-				let releaseFac = m_framesLeft / m_releaseFrames;
+				let releaseFac = this.framesLeft / this.releaseFrames;
 				console.assert(
 					releaseFac <= 1.0,
 					"Release factor should not be above 1.",
@@ -574,9 +594,6 @@
 			this.samples.set(path, sample);
 		}
 
-        // Generate samples and progress song
-		generateSamples(leftBuffer, rightBuffer) {}
-
 		/*
 		-- .tri file spec --
 
@@ -701,10 +718,6 @@
 			// TODO: Free sample data that isn't used in this song
 
 			this.song = song;
-
-			// TODO: fix my original stupid method of writing data into editor structs first
-			// and then filling playback structs after... should go straight into playback.
-
 			console.log("Loaded " + path, "in", (performance.now() - perfStart), "ms");
 		}
 
@@ -733,6 +746,94 @@
 
 		play() {}
 		pause() {}
+
+		// Generate samples and progress song
+		generateSamples(leftBuffer, rightBuffer) {
+			// Zero memory
+			leftBuffer.fill(0);
+			rightBuffer.fill(0);
+
+			let framesLeft = leftBuffer.length;
+			let p = 0;
+
+			while (framesLeft > 0) {
+				// Move to the next beat
+				if (this.beatProgress >= this.framesPerBeat && this.framesPerBeat > 0) {
+					while (this.beatProgress >= this.framesPerBeat) {
+						this.beatProgress -= this.framesPerBeat;
+					}
+
+					this.seek(this.playhead + 1);
+					this.triggerTrackEvents();
+				}
+
+				// Calculate number of frames to do
+				let framesToDo = Math.min(this.framesPerBeat - this.beatProgress, framesLeft);
+				framesLeft -= framesToDo;
+
+				// Prevent deadlock in a situation where we haven't loaded a song yet
+				if (framesToDo <= 0 && framesLeft > 0) {
+					framesLeft -= framesLeft;
+				}
+
+				// Prevent deadlock where framesToDo becomes really small
+				if (this.framesPerBeat - this.beatProgress < epsilon) {
+					this.beatProgress = this.framesPerBeat;
+					continue;
+				}
+
+				if (this.playing) {
+					this.beatProgress += framesToDo;
+				}
+
+				// -- Generate samples --
+				for (let i = 0; i < framesToDo; i++) {
+					let len = this.activeVoices.length;
+					for (let j = len - 1; j >= 0; j--) {
+						let voice = this.activeVoices.at(j);
+
+						// Create left/right sample
+						leftBuffer[p] += voice.eval(false);
+						rightBuffer[p] += voice.eval(true);
+
+						// Update voice
+						voice.nextFrame();
+						if (voice.framesLeft <= 0) {
+							if (!voice.releaseActive && voice.releaseFrames > 0) {
+								// Activate release
+								voice.releaseActive = true;
+								voice.framesLeft = voice.releaseFrames;
+							}
+							else {
+								// Make this voice unused
+								this.inactiveVoices.push(voice);
+
+								const index = this.activeVoices.indexOf(voice);
+								this.activeVoices.splice(index, 1);
+							}
+						}
+					}
+					p++;
+				}
+
+				// TODO: remove unused voices from each track
+				// I don't remember why I do this
+			}
+
+			// Do final mixing
+			p = 0;
+			for (let i = 0; i < leftBuffer.length; i++) {
+				// Scale to master volume
+				leftBuffer[p] *= this.masterVolume;
+				rightBuffer[p] *= this.masterVolume;
+
+				// Clip at 1.0 / -1.0
+				leftBuffer[p] = clamp(leftBuffer[p], -masterVolumeMax, masterVolumeMax);
+				rightBuffer[p] *= clamp(rightBuffer[p], -masterVolumeMax, masterVolumeMax);
+
+				p++;
+			}
+		}
 	}
 
 	window.initTritone = async () => {
