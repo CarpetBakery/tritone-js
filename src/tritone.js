@@ -575,6 +575,19 @@
 				readEvents(view, panCount[i], panEvents, version);
 			}
 
+			// Fill song struct
+			this.song.bpm = bpm;
+			this.song.endPosition = endPosition;
+			this.fileLoaded = path;
+
+			for (let i = 0; i < _numTracks; i++) {
+				let track = new InstrumentTrack();
+
+				
+				
+				tracks[i] = track;
+			}
+
 			// TODO: fix my original stupid method of writing data into editor structs first
 			// and then filling playback structs after... should go straight into playback.
 		}
