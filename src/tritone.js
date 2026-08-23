@@ -34,21 +34,83 @@
 		return a + (b - a) * fac;
 	}
 
-	function readString(view, p) {
-		let _length = 0;
-		let bytes = [];
-
-		while (p < view.byteLength) {
-			const byte = view.getUint8(p, true);
-			if (byte === 0) {
-				break;
-			}
-			bytes.push(byte);
-			p++;
+	class FileStream {
+		constructor() {
+			this.view = null;
+			this.path = "";
+			this.p = 0;
 		}
 
-		const decoder = new TextDecoder("utf-8");
-		return decoder.decode(new Uint8Array(bytes));
+		static async load(path) {
+			const res = await fetch(path);
+			const data = await res.arrayBuffer();
+			
+			const fs = new FileStream();
+			fs.view = new DataView(data);
+			fs.path = path;
+			
+			return fs;
+		}
+
+		readUint8() {
+			const val = this.view.getUint8(this.p);
+			this.p += 1;
+			return val;
+		}
+
+		readUint16(littleEndian = true) {
+			const val = this.view.getUint16(this.p, littleEndian);
+			this.p += 2;
+			return val;
+		}
+		
+		readUint32(littleEndian = true) {
+			const val = this.view.getUint32(this.p, littleEndian);
+			this.p += 4;
+			return val;
+		}
+
+		readFloat32() {
+			const val = this.view.getFloat32(this.p);
+			this.p += 4;
+			return val;
+		}
+
+		readInt8() {
+			const val = this.view.getInt8(this.p);
+			this.p += 1;
+			return val;
+		}
+
+		readInt16(littleEndian = true) {
+			const val = this.view.getInt16(this.p, littleEndian);
+			this.p += 2;
+			return val;
+		}
+		
+		readInt32(littleEndian = true) {
+			const val = this.view.getInt32(this.p, littleEndian);
+			this.p += 4;
+			return val;
+		}
+
+		readString() {
+			let _length = 0;
+			let bytes = [];
+
+			while (this.p < this.view.byteLength) {
+				const byte = this.view.getUint8(this.p, true);
+				if (byte === 0) {
+					this.p++;
+					break;
+				}
+				bytes.push(byte);
+				this.p++;
+			}
+
+			const decoder = new TextDecoder("utf-8");
+			return decoder.decode(new Uint8Array(bytes));
+		}
 	}
 
 	class NoteEvent {
@@ -370,13 +432,9 @@
 
 	class Song {
 		/**
-		 * @param {ArrayBuffer} data
+		 * @param {String} path
 		 */
-		constructor(data) {
-			const view = new DataView(data);
-
-			// TODO: Load song here
-
+		constructor() {
 			this.endPosition = 0;
 			this.bpm = 140;
 			this.trackCount = 16;
@@ -502,8 +560,43 @@
         // Generate samples and progress song
 		generateSamples(leftBuffer, rightBuffer) {}
 
+		/*
+		-- .tri file spec --
+
+		4 char "TRTN" magic header
+		u16 - version number
+		u16 - tempo (BPM)
+		u32 - repeat position
+		u32 - end song position
+		u8 	- number of event types (velocity, pan)
+		u16 - number of tracks
+
+		PER-TRACK (instrument data):
+		--  Null-terminated string - sample data filename
+		--  u8 	- oneshot (0 or 1)
+		--  u32 - sample loop start
+		--  u32 - sample loop end
+		--  u32 - note event count
+		--  u32 - velocity event count
+		--  u32 - pan event count
+
+		PER-TRACK (event data):
+		--	PER-noteCount
+		--	--	u32 - position
+		--	--	u8 	- pitch
+		--	--	u16 - length
+		--	PER-velocityCount
+		--	--	u32 	- position
+		--	--	u8 - value
+		--	PER-panCount
+		--	--	u32 	- position
+		--	--	u8 - value
+
+		*/
 		// Load a song from a file
 		async load(path, playOnLoad = false) {
+			let song = new Song();
+			
 			let noteCount = Array(trackCount).fill(0);
 			let velocityCount = Array(trackCount).fill(0);
 			let panCount = Array(trackCount).fill(0);
@@ -511,29 +604,28 @@
 			let oneshot = Array(trackCount).fill(false);
 
 			// Fetch binary song data
-			const res = await fetch(path);
-			const data = await res.arrayBuffer();
-			const view = new DataView(data);
-			let p = 0;
+			const f = await FileStream.load(path);
 
 			// Verify tritone project file
-			const magic = view.getUint32(p, true); p += 4;
-			if (magic != 0x5452544E) {
-				throw "Invalid magic header.";
+			const magic = ['T', 'R', 'T', 'N'];
+			for (let i = 0; i < 4; i++) {
+				const c = String.fromCharCode(f.readUint8());
+				if (c != magic[i]) {
+					throw "Invalid magic header.";
+				}
 			}
 
 			// -- Read song info --
-			const version = view.getUint16(p, true); p += 2;
-			const bpm = view.getUint16(p, true); p += 2;
-			const repeatPosition = view.getUint32(p, true); p += 4;
-			const endSongPosition = view.getUint32(p, true); p += 4;
-			const _numEvents = view.getUint8(p, true); p += 1;
-			const _numTracks = view.getUint16(p, true); p += 2;
+			const version = f.readUint16(true);
+			song.bpm = f.readUint16(true);
+			const repeatPosition = f.readUint32(true); // Unused
+			song.endPosition = f.readUint32(true);
+			const _numEvents = f.readUint8(true);
+			song.trackCount = f.readUint16(true);
 
 			// -- Read track info chunk --
-			for (let i = 0; i < _numTracks; i++) {
-				let samplePath = readString(view, p);
-				p += samplePath.length + 1;
+			for (let i = 0; i < song.trackCount; i++) {
+				let samplePath = f.readString();
 
 				if (samplePath != defaultSampleData) {
 					samplePaths[i] = samplePath;
@@ -542,66 +634,74 @@
 					samplePaths[i] = "";
 				}
 
-				oneshot[i] = view.getUint8(p, true); p += 1;
+				oneshot[i] = f.readUint8(true);
 
-				const sampleLoopStart = view.getUint32(p, true); p += 4;
-				const sampleLoopEnd = view.getUint32(p, true); p += 4;
-				noteCount[i] = view.getUint32(p, true); p += 4;
-				velocityCount[i] = view.getUint32(p, true); p += 4;
-				panCount[i] = view.getUint32(p, true); p += 4;
+				const sampleLoopStart = f.readUint32(true); // Unused
+				const sampleLoopEnd = f.readUint32(true); // Unused
+				noteCount[i] = f.readUint32(true);
+				velocityCount[i] = f.readUint32(true);
+				panCount[i] = f.readUint32(true);
 			}
 
 			// Read track event data
-			for (let i = 0; i < _numTracks; i++) {
+			for (let i = 0; i < song.trackCount; i++) {
+				let track = new InstrumentTrack();
+				
 				let samplePath = samplePaths[i];
 				let _oneshot = oneshot[i];
 
 				// Read note data
-				for (let j = 0; j < noteConut[i]; j++) {
+				for (let j = 0; j < noteCount[i]; j++) {
 					let note = new NoteEvent();
 	
-					let position = view.getUint32(p, true); p += 4;
-					let pitch = view.getUint8(p, true); p += 1;
-					let length = view.getUint16(p, true); p += 2;
-	
-					// addNoteData()
+					let position = f.readUint32(true);
+					note.pitch = f.readUint8(true);
+					note.length = f.readUint16(true);
+
+					// Push into noteEvents
+					if (track.noteEvents.has(position)) {
+						let noteList = track.noteEvents.get(position);
+						noteList.push(note);
+					}
+					else {
+						track.noteEvents.set(position, [note]);
+					}
 				}
 
-				let velocityEvents = new Map();
-				let panEvents = new Map();
+				this.readEvents(f, velocityCount[i], track.velocityEvents, version);
+				this.readEvents(f, panCount[i], track.panEvents, version);
 
-				// TODO: need some way to pass dataview pointer
-				readEvents(view, velocityCount[i], velocityEvents, version);
-				readEvents(view, panCount[i], panEvents, version);
+				song.tracks.push(track);
 			}
 
-			// Fill song struct
-			this.song.bpm = bpm;
-			this.song.endPosition = endPosition;
-			this.fileLoaded = path;
-
-			for (let i = 0; i < _numTracks; i++) {
-				let track = new InstrumentTrack();
-
-				
-				
-				tracks[i] = track;
-			}
+			this.song = song;
 
 			// TODO: fix my original stupid method of writing data into editor structs first
 			// and then filling playback structs after... should go straight into playback.
+
+			console.log("Loaded " + path);
 		}
 
-		readEvents(view, numEvents, eventMap, version) {
-			// TODO
-
+		readEvents(f, numEvents, eventMap, version) {
 			if (version == 1) {
 				for (let i = 0; i < numEvents; i++) {
-					// let event = new Event(0);
+					let event = new Event(0);
+					
+					let position = f.readUint32();
+					event.value = f.readUint8() / 0xFF;
+					
+					eventMap.set(position, event);
 				}
 			}
 			else if (version == 0) {
+				for (let i = 0; i < numEvents; i++) {
+					let event = new Event(0);
 
+					let position = f.readUint32();
+					event.value = f.readFloat32();
+
+					eventMap.set(position, event);
+				}
 			}
 		}
 
@@ -615,7 +715,11 @@
 		}
 
 		console.log("Initializing Tritone");
-
-		window.Tritone = Tritone;
+		window.Tritone = new Tritone();
 	};
+
+	window.loadTritone = async (path) => {
+		await window.initTritone();
+		await window.Tritone.load(path)
+	}
 })();

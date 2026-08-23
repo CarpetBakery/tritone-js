@@ -10,6 +10,7 @@
 			(() => {
 				let triPlayBtn = document.getElementById("play-button-tritone");
 				let triStopBtn = document.getElementById("stop-button-tritone");
+				let triLoadBtn = document.getElementById("load-button-tritone");
 
 				window.stopTri = () => {
 					console.log("Stop tritone");
@@ -21,6 +22,10 @@
 
 				triPlayBtn.onclick = window.playTri;
 				triStopBtn.onclick = window.stopTri;
+
+				triLoadBtn.onclick = async () => {
+					await window.loadTritone("./data/tri/enegy_smalltest.tri");
+				}
 			})();
 		</script>
 	</head>
@@ -30,6 +35,8 @@
 		<button id="stop-button">Stop</button>
 
 		<h1>Tritone Test</h1>
+		<button id="load-button-tritone">Load</button>
+		<br>
 		<button id="play-button-tritone">Play</button>
 		<button id="stop-button-tritone">Stop</button>
 	</body>
