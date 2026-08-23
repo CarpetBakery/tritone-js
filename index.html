@@ -20,11 +20,11 @@
 					console.log("Play tritone");
 				};
 
-				triPlayBtn.onclick = window.playTri;
-				triStopBtn.onclick = window.stopTri;
+				triPlayBtn.onclick = () => window.Tritone.play();
+				triStopBtn.onclick = () => window.Tritone.pause();
 
 				triLoadBtn.onclick = async () => {
-					await window.loadTritone("./data/tri/enegy_smalltest.tri");
+					await window.loadTritone("./data/tri/enegy_smalltest.tri", true);
 				}
 			})();
 		</script>

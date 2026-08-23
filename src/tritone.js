@@ -418,7 +418,7 @@
 		triggerEvents(position, playback) {
 			// Look for events at this position and apply them
 			if (this.noteEvents.has(position)) {
-				this.noteEvents.get(position).array.forEach((note) => {
+				this.noteEvents.get(position).forEach((note) => {
 					this.startNote(note, playback);
 				});
 			}
@@ -659,6 +659,11 @@
 			const _numEvents = f.readUint8(true);
 			song.trackCount = f.readUint16(true);
 
+			// Calculate samples per beat
+			let beatsPerSecond = song.bpm / 60.0;
+			this.samplesPerBeat = sampleRate / beatsPerSecond;
+			this.framesPerBeat = this.samplesPerBeat / 4.0
+
 			// -- Read track info chunk --
 			for (let i = 0; i < song.trackCount; i++) {
 				let samplePath = f.readString();
@@ -719,6 +724,10 @@
 
 			this.song = song;
 			console.log("Loaded " + path, "in", (performance.now() - perfStart), "ms");
+
+			if (playOnLoad) {
+				this.play();
+			}
 		}
 
 		readEvents(f, numEvents, eventMap, version) {
@@ -744,8 +753,12 @@
 			}
 		}
 
-		play() {}
-		pause() {}
+		play() {
+			this.playing = true;
+		}
+		pause() {
+			this.playing = false;
+		}
 
 		// Generate samples and progress song
 		generateSamples(leftBuffer, rightBuffer) {
@@ -807,17 +820,16 @@
 							else {
 								// Make this voice unused
 								this.inactiveVoices.push(voice);
-
-								const index = this.activeVoices.indexOf(voice);
-								this.activeVoices.splice(index, 1);
+								this.activeVoices.splice(j, 1);
 							}
 						}
 					}
 					p++;
 				}
 
-				// TODO: remove unused voices from each track
-				// I don't remember why I do this
+				this.song.tracks.forEach((track) => {
+					track.removeUnusedVoices();
+				})
 			}
 
 			// Do final mixing
@@ -833,6 +845,10 @@
 
 				p++;
 			}
+
+			if (this.playing) {
+				console.log("Generated ", leftBuffer, rightBuffer, "samples");
+			}
 		}
 	}
 
@@ -846,8 +862,8 @@
 		window.Tritone.init();
 	};
 
-	window.loadTritone = async (path) => {
+	window.loadTritone = async (path, playOnLoad = false) => {
 		await window.initTritone();
-		await window.Tritone.load(path)
+		await window.Tritone.load(path, playOnLoad)
 	}
 })();
