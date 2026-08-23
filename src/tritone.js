@@ -340,7 +340,7 @@
 			this.velocityEvents = new Map(); // Position to event
 			this.panEvents = new Map(); // Position to event
 
-			this.sampleData = new SampleData();
+			this.sampleData = null;
 
 			this.oneshot = false;
 
@@ -476,9 +476,9 @@
 
             // Public
             this.song = null;
-            this.samples = new Map(); // Path to SampleData
+            this.samples = new Map(); // Path -> SampleData
 
-            this.samplePath = "";
+            this.samplePath = "./data/sample/";
 
 			// Webaudio
 			this.ctx = null;
@@ -520,7 +520,7 @@
 		init() {
 			this.ctx = new (window.AudioContext || window.webkitAudioContext)();
 			sampleRate = this.ctx.sampleRate;
-			samplesThisTick = 0;
+			// samplesThisTick = 0;
 
 			this.node = this.ctx.createScriptProcessor(requestedBufferSize);
 			this.node.onaudioprocess = (e) =>
@@ -555,7 +555,24 @@
 		}
 
         // Load a sample if it hasn't already been loaded and return a pointer to the SampleData
-		loadOrFetchSampleData(path) {}
+		async loadOrFetchSampleData(path) {
+			if (this.samples.has(path)) {
+				return this.samples.get(path);
+			}
+
+			console.log("Loading ", path);
+
+			// Load the file
+			const res = await fetch(this.samplePath + path);
+			const arrayBuffer = await res.arrayBuffer();
+			const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+
+			console.log(path, " loaded: ", audioBuffer);
+
+			let sample = new SampleData();
+			sample.setData(audioBuffer);
+			this.samples.set(path, sample);
+		}
 
         // Generate samples and progress song
 		generateSamples(leftBuffer, rightBuffer) {}
@@ -595,6 +612,8 @@
 		*/
 		// Load a song from a file
 		async load(path, playOnLoad = false) {
+			let perfStart = performance.now();
+			
 			let song = new Song();
 			
 			let noteCount = Array(trackCount).fill(0);
@@ -671,15 +690,22 @@
 				this.readEvents(f, velocityCount[i], track.velocityEvents, version);
 				this.readEvents(f, panCount[i], track.panEvents, version);
 
+				// Read sample data
+				if (samplePath != "") {
+					track.sampleData = await this.loadOrFetchSampleData(samplePath);
+				}
+
 				song.tracks.push(track);
 			}
+
+			// TODO: Free sample data that isn't used in this song
 
 			this.song = song;
 
 			// TODO: fix my original stupid method of writing data into editor structs first
 			// and then filling playback structs after... should go straight into playback.
 
-			console.log("Loaded " + path);
+			console.log("Loaded " + path, "in", (performance.now() - perfStart), "ms");
 		}
 
 		readEvents(f, numEvents, eventMap, version) {
@@ -716,6 +742,7 @@
 
 		console.log("Initializing Tritone");
 		window.Tritone = new Tritone();
+		window.Tritone.init();
 	};
 
 	window.loadTritone = async (path) => {
