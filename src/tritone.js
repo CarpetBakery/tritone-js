@@ -183,7 +183,8 @@
 			while (index >= this.data.length) {
 				index -= this.data.length;
 			}
-			return data[Math.floor(index)];
+
+			return this.data.getChannelData(0)[Math.floor(index)];
 		}
 	}
 
@@ -225,7 +226,7 @@
 				return 0.0;
 			}
 
-			let sample = evalLagrange();
+			let sample = this.evalLagrange();
 			let velocityValue, panValue;
 
 			if (this.rampFramesLeft) {
@@ -259,7 +260,7 @@
 
 			// Apply attack
 			if (this.attackFramesLeft > 0) {
-				let attackFac = 1.0 - m_attackFramesLeft / m_attackFrames;
+				let attackFac = 1.0 - this.attackFramesLeft / this.attackFrames;
 				console.assert(
 					attackFac <= 1.0,
 					"Attack factor should not be above 1.",
@@ -286,8 +287,8 @@
 
 			let sampleA, sampleB, sampleC, sampleD;
 			let c0, c1, c2, c3;
-			let margin = m_dataIndex - 2;
-			let subPos = m_dataIndex - static_cast < int > m_dataIndex;
+			let margin = this.dataIndex - 2;
+			let subPos = this.dataIndex - this.dataIndex;
 
 			sampleA = this.sampleData.getSafe(margin - 1);
 			sampleB = this.sampleData.getSafe(margin);
@@ -436,8 +437,8 @@
 		removeUnusedVoices() {
 			let len = this.voices.length;
 			for (let j = len - 1; j >= 0; j--) {
-				if (this.voices.get(j).framesLeft <= 0) {
-					this.voice.splice(j, 1);
+				if (this.voices[j].framesLeft <= 0) {
+					this.voices.splice(j, 1);
 				}
 			}
 		}
@@ -522,8 +523,9 @@
 			let voice = this.inactiveVoices.pop()
 			this.activeVoices.push(voice);
 
-			// Initialize voice
-			voice = new Voice();
+			// Initialize voice without breaking references
+			let temp = new Voice();
+			Object.assign(voice, temp);
 
 			return voice;
 		}
@@ -546,7 +548,7 @@
 
         // Init audio engine
 		init() {
-			this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+			this.ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
 			sampleRate = this.ctx.sampleRate;
 			// samplesThisTick = 0;
 
@@ -885,9 +887,9 @@
 				p++;
 			}
 
-			if (this.playing) {
-				console.log("Generated ", leftBuffer, rightBuffer, "samples");
-			}
+			// if (this.playing) {
+			// 	console.log("Generated ", leftBuffer, rightBuffer, "samples");
+			// }
 		}
 	}
 
