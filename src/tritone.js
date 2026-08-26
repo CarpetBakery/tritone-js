@@ -152,7 +152,7 @@
 
 	class SampleData {
 		constructor() {
-			this.data = new Float32Array();
+			this.data = null;
 		}
 
 		freeData() {
@@ -283,32 +283,30 @@
 		}
 
 		evalLagrange() {
-			let sample;
+			const index = Math.floor(this.dataIndex);
+			const subPos = this.dataIndex - index;
 
-			let sampleA, sampleB, sampleC, sampleD;
-			let c0, c1, c2, c3;
-			let margin = this.dataIndex - 2;
-			let subPos = this.dataIndex - this.dataIndex;
+			const sampleA = this.sampleData.getSafe(index - 1);
+			const sampleB = this.sampleData.getSafe(index);
+			const sampleC = this.sampleData.getSafe(index + 1);
+			const sampleD = this.sampleData.getSafe(index + 2);
 
-			sampleA = this.sampleData.getSafe(margin - 1);
-			sampleB = this.sampleData.getSafe(margin);
-			sampleC = this.sampleData.getSafe(margin + 1);
-			sampleD = this.sampleData.getSafe(margin + 2);
-
-			c0 = sampleB;
-			c1 =
+			const c0 = sampleB;
+			const c1 =
 				sampleC -
 				(1 / 3.0) * sampleA -
 				(1 / 2.0) * sampleB -
 				(1 / 6.0) * sampleD;
-			c2 = (1 / 2.0) * (sampleA + sampleC) - sampleB;
-			c3 =
+
+			const c2 =
+				(1 / 2.0) * (sampleA + sampleC) -
+				sampleB;
+
+			const c3 =
 				(1 / 6.0) * (sampleD - sampleA) +
 				(1 / 2.0) * (sampleB - sampleC);
 
-			sample = ((c3 * subPos + c2) * subPos + c1) * subPos + c0;
-
-			return sample;
+			return ((c3 * subPos + c2) * subPos + c1) * subPos + c0;
 		}
 
 		nextFrame() {
@@ -321,8 +319,12 @@
 		incDataIndex() {
 			// Increment data index, wrap around
 			let inc = Math.pow(twelveRoot2, this.pitch);
-			this.dataIndex += inc;
-			while (this.dataIndex > this.sampleData.size()) {
+			
+			// Account for differing sample rates (hopefully)
+			const rateRatio = this.sampleData.data.sampleRate / sampleRate;
+			this.dataIndex += inc * rateRatio;
+
+			while (this.dataIndex >= this.sampleData.size()) {
 				if (this.oneshot) {
 					this.framesLeft = 0;
 					this.releaseActive = true;
