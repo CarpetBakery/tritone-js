@@ -582,9 +582,9 @@
 
         // Free audio engine
 		free() {
-			if (ctx) {
-				node.disconnect();
-				ctx.close();
+			if (this.ctx) {
+				this.node.disconnect();
+				this.ctx.close();
 			}
 		}
 
