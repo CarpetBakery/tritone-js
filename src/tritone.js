@@ -804,7 +804,8 @@
 			leftBuffer.fill(0);
 			rightBuffer.fill(0);
 
-			// Temp
+			// TEMP
+			// TODO: Need something to block audio thread while file is loading, otherwise tracks will be in weird state
 			if (!this.playing) {
 				return;
 			}
@@ -876,17 +877,14 @@
 			}
 
 			// Do final mixing
-			p = 0;
 			for (let i = 0; i < leftBuffer.length; i++) {
 				// Scale to master volume
-				leftBuffer[p] *= this.masterVolume;
-				rightBuffer[p] *= this.masterVolume;
+				leftBuffer[i] *= this.masterVolume;
+				rightBuffer[i] *= this.masterVolume;
 
 				// Clip at 1.0 / -1.0
-				leftBuffer[p] = clamp(leftBuffer[p], -masterVolumeMax, masterVolumeMax);
-				rightBuffer[p] *= clamp(rightBuffer[p], -masterVolumeMax, masterVolumeMax);
-
-				p++;
+				leftBuffer[i] = clamp(leftBuffer[i], -masterVolumeMax, masterVolumeMax);
+				rightBuffer[i] = clamp(rightBuffer[i], -masterVolumeMax, masterVolumeMax);
 			}
 
 			// if (this.playing) {
