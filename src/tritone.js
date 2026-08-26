@@ -476,7 +476,7 @@
 			this.beatProgress = 0;
 
 			this.voiceCount = 128;
-            this.voices = new Array<Voice>(this.voiceCount);
+            this.voices = Array.from({length: this.voiceCount}, () => new Voice());
 
 			// List of references to voices that aren't in use
 			this.inactiveVoices = [];
@@ -500,9 +500,17 @@
 
             this.samplePath = "./data/sample/";
 
+			// Default sin sample data
+			this.sineSampleData = new SampleData();
+
 			// Webaudio
 			this.ctx = null;
 			this.node = null;
+
+			// Fill unusedVoices
+			for (let i = 0; i < this.voiceCount; i++) {
+				this.inactiveVoices.push(this.voices[i]);
+			}
 		}
 
 		requestUnusedVoice() {
@@ -542,6 +550,23 @@
 			sampleRate = this.ctx.sampleRate;
 			// samplesThisTick = 0;
 
+			// Generate default sine wave
+			{
+				let dataSize = 100;
+				let data = new Float32Array(dataSize);
+				for (let i = 0; i < dataSize; i++)
+				{
+					let fac = i / (dataSize);
+					fac *= Math.PI * 2.0;
+					
+					data[i] = Math.sin(fac) * 0.4;
+				}
+				let buffer = this.ctx.createBuffer(1, data.length, this.ctx.sampleRate);
+				buffer.copyToChannel(data, 0);
+				this.sineSampleData.setData(buffer);
+			}
+
+			// Start playback
 			this.node = this.ctx.createScriptProcessor(requestedBufferSize);
 			this.node.onaudioprocess = (e) =>
 				this.update(
@@ -582,16 +607,23 @@
 
 			console.log("Loading ", path);
 
-			// Load the file
-			const res = await fetch(this.samplePath + path);
-			const arrayBuffer = await res.arrayBuffer();
-			const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
-
-			console.log(path, " loaded: ", audioBuffer);
-
-			let sample = new SampleData();
-			sample.setData(audioBuffer);
-			this.samples.set(path, sample);
+			try {
+				// Load the file
+				const res = await fetch(this.samplePath + path);
+				const arrayBuffer = await res.arrayBuffer();
+				const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+	
+				console.log(path, " loaded: ", audioBuffer);
+	
+				let sample = new SampleData();
+				sample.setData(audioBuffer);
+				this.samples.set(path, sample);
+				return sample;
+			}
+			catch (error) {
+				console.log("Could not read sample ", path, ". Falling back to default sin...");
+				return this.sineSampleData;
+			}
 		}
 
 		/*
@@ -713,9 +745,7 @@
 				this.readEvents(f, panCount[i], track.panEvents, version);
 
 				// Read sample data
-				if (samplePath != "") {
-					track.sampleData = await this.loadOrFetchSampleData(samplePath);
-				}
+				track.sampleData = await this.loadOrFetchSampleData(samplePath);
 
 				song.tracks.push(track);
 			}
@@ -755,9 +785,13 @@
 
 		play() {
 			this.playing = true;
+			this.seek(this.playhead);
+			this.beatProgress = 0;
+			this.triggerTrackEvents();
 		}
 		pause() {
 			this.playing = false;
+			this.killAllVoices();
 		}
 
 		// Generate samples and progress song
@@ -765,6 +799,11 @@
 			// Zero memory
 			leftBuffer.fill(0);
 			rightBuffer.fill(0);
+
+			// Temp
+			if (!this.playing) {
+				return;
+			}
 
 			let framesLeft = leftBuffer.length;
 			let p = 0;
