@@ -16,7 +16,8 @@
 	// Pitching
 	const baseFreq = 440.0;
 	const twelveRoot2 = Math.pow(2.0, 1.0 / 12.0);
-	const pitchOffset = -32;
+	// const pitchOffset = -32;
+	const pitchOffset = -48;
 
 	// Tritone format
 	const magicHeader = "TRTN";
@@ -173,9 +174,9 @@
 		}
 
 		getSafe(index) {
-			// if (data == null || this.data.length == 0) {
-			//     return 0.0;
-			// }
+			if (!this.data || this.data.length === 0) {
+				return 0.0;
+			}
 
 			while (index < 0) {
 				index += this.data.length;
@@ -229,8 +230,8 @@
 			let sample = this.evalLagrange();
 			let velocityValue, panValue;
 
-			if (this.rampFramesLeft) {
-				let lerpFac = 1.0 - this.rampFramesLeft / rampFrames;
+			if (this.rampFramesLeft > 0) {
+				let lerpFac = 1.0 - (this.rampFramesLeft / rampFrames);
 
 				velocityValue = lerp(
 					this.velocity,
@@ -340,12 +341,20 @@
 		}
 		setVelocity(velocity) {
 			this.velocity = velocity;
+
+			if (this.velocity != this.targetVelocity) {
+				this.rampFramesLeft = rampFrames;
+			}
 		}
 		getPan() {
 			return this.pan;
 		}
 		setPan(pan) {
 			this.pan = pan;
+
+			if (this.pan != this.targetPan) {
+				this.rampFramesLeft = rampFrames;
+			}
 		}
 
 		setPitch(pitch) {
